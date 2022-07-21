@@ -107,7 +107,7 @@ def get_program_parameters():
     '''
     parser = argparse.ArgumentParser(description=description, epilog=epilogue,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('-d', default="ct_images", help='A DICOM Image directory.')
+    parser.add_argument('-d', default=f'CT 3/Segment_1.vtk', help='A DICOM Image directory.')
     parser.add_argument('-i', type=float, default=0, help='The iso value to use.')
     args = parser.parse_args()
     return args.d, args.i
