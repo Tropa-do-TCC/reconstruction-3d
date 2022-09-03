@@ -4,6 +4,9 @@
 import vtk.vtkInteractionStyle
 # noinspection PyUnresolvedReferences
 import vtk.vtkRenderingOpenGL2
+
+from vtk import vtkTransform
+
 from vtk.vtkCommonColor import vtkNamedColors
 
 from vtk.vtkCommonDataModel import vtkImageData
@@ -38,7 +41,20 @@ from vtk.vtkRenderingCore import (
 )
 from vtkmodules.vtkRenderingCore import vtkProp3D
 
+
 colors = vtkNamedColors()
+
+
+def calculate_dicom_coordinates(reader: vtkDICOMImageReader):
+    transform = vtkTransform()
+    transform.RotateWXYZ(180, 1.0, 1.0, 0)
+    # rotation.SetInputConnection(reader.GetOutputPort())
+
+    transformFilter = vtk.vtkTransformPolyDataFilter()
+    transformFilter.SetTransform(transform)
+    transformFilter.SetInputConnection(reader.GetOutputPort())
+    transformFilter.Update()
+
 
 def get_landmarks_actors():
     colors = vtkNamedColors()
@@ -47,6 +63,7 @@ def get_landmarks_actors():
     sphereSource = vtkSphereSource()
     sphereSource.SetCenter(50, 100, 300)
     sphereSource.SetRadius(5)
+
     # Make the surface smooth.
     sphereSource.SetPhiResolution(100)
     sphereSource.SetThetaResolution(100)
@@ -61,21 +78,11 @@ def get_landmarks_actors():
 
     return actor
 
-def get_skull_actor(iso_value, dicom_dir):
-    use_flying_edges = vtk_version_ok(8, 2, 0)
 
-    if iso_value is None and dicom_dir is not None:
-        print('An ISO value is needed.')
-        return ()
+def get_skull_surface():
+    can_use_flying_edges = vtk_version_ok(8, 2, 0)
 
-    volume = vtkImageData()
-
-    reader = vtkDICOMImageReader()
-    reader.SetDirectoryName(dicom_dir)
-    reader.Update()
-    volume.DeepCopy(reader.GetOutput())
-
-    if use_flying_edges:
+    if can_use_flying_edges:
         try:
             surface = vtkFlyingEdges3D()
         except AttributeError:
@@ -83,14 +90,38 @@ def get_skull_actor(iso_value, dicom_dir):
     else:
         surface = vtkMarchingCubes()
 
+    return surface
+
+
+def get_skull_actor(iso_value, dicom_dir):
+    volume = vtkImageData()
+
+    # reader
+    reader = vtkDICOMImageReader()
+    reader.SetDirectoryName(dicom_dir)
+    reader.Update()
+    volume.DeepCopy(reader.GetOutput())
+
+    # surface
+    surface = get_skull_surface()
     surface.SetInputData(volume)
     surface.ComputeNormalsOn()
     surface.SetValue(0, iso_value)
 
+    # flip transformation
+    transform = vtkTransform()
+    transform.RotateWXYZ(180, 1.0, 1.0, 0)
+    transformFilter = vtk.vtkTransformPolyDataFilter()
+    transformFilter.SetTransform(transform)
+    transformFilter.SetInputConnection(surface.GetOutputPort())
+    transformFilter.Update()
+
+    # mapper
     mapper = vtkPolyDataMapper()
-    mapper.SetInputConnection(surface.GetOutputPort())
+    mapper.SetInputConnection(transformFilter.GetOutputPort())
     mapper.ScalarVisibilityOff()
 
+    # actor
     actor = vtkActor()
     actor.SetMapper(mapper)
     actor.GetProperty().SetColor(colors.GetColor3d('Green'))
@@ -99,6 +130,10 @@ def get_skull_actor(iso_value, dicom_dir):
 
 
 def main(dicom_dir, iso_value):
+    if iso_value is None and dicom_dir is not None:
+        print('An ISO value is needed.')
+        return
+
     renderer = vtkRenderer()
     renderer.SetBackground(colors.GetColor3d('Black'))
 
