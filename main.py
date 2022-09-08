@@ -1,37 +1,19 @@
 #!/usr/bin/env python
 
 # noinspection PyUnresolvedReferences
-import vtk.vtkInteractionStyle
-# noinspection PyUnresolvedReferences
-import vtk.vtkRenderingOpenGL2
-
 from vtk.vtkCommonColor import vtkNamedColors
-
 from vtk.vtkCommonDataModel import vtkImageData
-from vtk.vtkFiltersCore import (
-    vtkFlyingEdges3D,
-    vtkMarchingCubes
-)
-
-from vtkmodules.vtkCommonColor import vtkNamedColors
-
-from vtkmodules.vtkRenderingCore import (
-    vtkActor,
-    vtkPolyDataMapper,
-    vtkRenderWindow,
-    vtkRenderWindowInteractor,
-    vtkRenderer
-)
+from vtk.vtkFiltersCore import vtkFlyingEdges3D
 from vtk.vtkFiltersSources import vtkSphereSource
 from vtk.vtkIOImage import vtkDICOMImageReader
-from vtk.vtkRenderingCore import (
-    vtkActor,
-    vtkPolyDataMapper,
-    vtkRenderWindow,
-    vtkRenderWindowInteractor,
-    vtkRenderer
-)
+from vtk.vtkRenderingCore import (vtkActor, vtkPolyDataMapper, vtkRenderer,
+                                  vtkRenderWindow, vtkRenderWindowInteractor)
+from vtkmodules.vtkCommonColor import vtkNamedColors
+from vtkmodules.vtkRenderingCore import (vtkActor, vtkPolyDataMapper,
+                                         vtkRenderer, vtkRenderWindow,
+                                         vtkRenderWindowInteractor)
 
+from dcm_decompress import decompress_slices
 
 colors = vtkNamedColors()
 
@@ -89,6 +71,8 @@ def get_skull_actor(dicom_dir: str, iso_value: float):
 
 
 def render_skull(dicom_dir: str, iso_value: float):
+    print("Rendering...")
+
     if iso_value is None or dicom_dir in [None, ""]:
         print('An ISO value and a DICOMDIR are needed.')
         return
@@ -116,6 +100,8 @@ def render_skull(dicom_dir: str, iso_value: float):
     render_window.Render()
     interactor.Start()
 
-
 if __name__ == "__main__":
-    render_skull(dicom_dir="dicom_dir", iso_value=100)
+    dicom_dir = "dicom_dir"
+
+    decompress_slices(dicom_dir)
+    render_skull(dicom_dir, iso_value=100)
