@@ -1,46 +1,121 @@
-import os
+#!/usr/bin/env python
 
-import pydicom
+# noinspection PyUnresolvedReferences
+import vtk.vtkInteractionStyle
+# noinspection PyUnresolvedReferences
+import vtk.vtkRenderingOpenGL2
 
-from filtters_operation import gaussian_filter, blur_filter
-from morph_operations import apply_closing, apply_opening
-import reconstruction_vtk
+from vtk.vtkCommonColor import vtkNamedColors
 
-# dicom folders
-INPUT_FILES = "ct_images"
-OUTPUT_FILES = "ct_images_processed"
+from vtk.vtkCommonDataModel import vtkImageData
+from vtk.vtkFiltersCore import (
+    vtkFlyingEdges3D,
+    vtkMarchingCubes
+)
 
+from vtkmodules.vtkCommonColor import vtkNamedColors
 
-def read_files_dcm(path_folder):
-    # Get all picture names
-    files = []
-    folder = os.listdir(path_folder)
-    # Separate the file names in the folder from the. DCM following them
-    for file in folder:
-        files.append(path_folder + "/" + file)
-
-    return files
-
-
-def pre_processing(image):
-    image_filtered = blur_filter(image)
-    image_op_morpho = apply_closing(image_filtered)
-    return image_op_morpho
-
-
-def convert_images_to_process_and_save(files):
-    for file in files:
-        medical_image = pydicom.dcmread(file)
-        # medical_image.file_meta.fix_meta_info()
-        image_read = medical_image.pixel_array
-
-        medical_image.PixelData = pre_processing(image_read)
-        medical_image.save_as("./" + OUTPUT_FILES + "/" + file.split("/")[2])
+from vtkmodules.vtkRenderingCore import (
+    vtkActor,
+    vtkPolyDataMapper,
+    vtkRenderWindow,
+    vtkRenderWindowInteractor,
+    vtkRenderer
+)
+from vtk.vtkFiltersSources import vtkSphereSource
+from vtk.vtkIOImage import vtkDICOMImageReader
+from vtk.vtkRenderingCore import (
+    vtkActor,
+    vtkPolyDataMapper,
+    vtkRenderWindow,
+    vtkRenderWindowInteractor,
+    vtkRenderer
+)
 
 
-reconstruction_vtk.main(INPUT_FILES, 100)
+colors = vtkNamedColors()
 
-read_images = read_files_dcm("./" + INPUT_FILES)
-convert_images_to_process_and_save(read_images)
 
-reconstruction_vtk.main(OUTPUT_FILES, 100)
+def get_landmarks_actors():
+    # Create a sphere
+    sphere_source = vtkSphereSource()
+    sphere_source.SetCenter(252, 88, 5)
+    sphere_source.SetRadius(5)
+
+    # Make the surface smooth.
+    sphere_source.SetPhiResolution(100)
+    sphere_source.SetThetaResolution(100)
+
+    # mapper
+    mapper = vtkPolyDataMapper()
+    mapper.SetInputConnection(sphere_source.GetOutputPort())
+
+    # actor
+    actor = vtkActor()
+    actor.SetMapper(mapper)
+    actor.GetProperty().SetColor(colors.GetColor3d('Tomato'))
+    actor.GetProperty().SetPointSize(20)
+
+    return actor
+
+
+def get_skull_actor(dicom_dir: str, iso_value: float):
+    volume = vtkImageData()
+
+    # reader
+    reader = vtkDICOMImageReader()
+    reader.SetDirectoryName(dicom_dir)
+    reader.Update()
+    volume.DeepCopy(reader.GetOutput())
+
+    # surface
+    # surface = vtkMarchingCubes()
+    surface = vtkFlyingEdges3D()
+    surface.SetInputData(volume)
+    surface.ComputeNormalsOn()
+    surface.SetValue(0, iso_value)
+
+    # mapper
+    mapper = vtkPolyDataMapper()
+    mapper.SetInputConnection(surface.GetOutputPort())
+    mapper.ScalarVisibilityOff()
+
+    # actor
+    actor = vtkActor()
+    actor.SetMapper(mapper)
+    actor.GetProperty().SetColor(colors.GetColor3d('Green'))
+
+    return actor
+
+
+def render_skull(dicom_dir: str, iso_value: float):
+    if iso_value is None or dicom_dir in [None, ""]:
+        print('An ISO value and a DICOMDIR are needed.')
+        return
+
+    # renderer
+    renderer = vtkRenderer()
+    renderer.SetBackground(colors.GetColor3d('Black'))
+
+    # render window
+    render_window = vtkRenderWindow()
+    render_window.AddRenderer(renderer)
+    render_window.SetWindowName('Skull Reconstruction')
+    render_window.SetSize(1500, 800)
+
+    # interactor
+    interactor = vtkRenderWindowInteractor()
+    interactor.SetRenderWindow(render_window)
+
+    # actors
+    renderer.AddActor(get_skull_actor(dicom_dir, iso_value))
+    renderer.AddActor(get_landmarks_actors())
+
+    renderer.ResetCamera()
+
+    render_window.Render()
+    interactor.Start()
+
+
+if __name__ == "__main__":
+    render_skull(dicom_dir="dicom_dir", iso_value=100)
