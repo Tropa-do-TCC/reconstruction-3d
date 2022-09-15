@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+
+# noinspection PyUnresolvedReferences
 import vtk
 
 from vtk.vtkCommonColor import vtkNamedColors
@@ -11,21 +14,15 @@ from vtkmodules.vtkRenderingCore import (vtkActor, vtkPolyDataMapper,
                                          vtkRenderer, vtkRenderWindow,
                                          vtkRenderWindowInteractor)
 
-import json
-
 colors = vtkNamedColors()
 
 
-def load_landmarks_in_ras_coordinates() -> vtk.vtkPoints:
+def load_landmarks_in_ras_coordinates(lps_landmarks: list[float]) -> vtk.vtkPoints:
     points = vtk.vtkPoints()
 
-    with open('landmarks.json', 'r') as json_file:
-        data = json.load(json_file)
-        lps_landmarks = [landmark['position'] for landmark in data['markups'][0]['controlPoints']]
-
-        for lps_landmark in lps_landmarks:
-            ras_landmark = [-lps_landmark[0], -lps_landmark[1], lps_landmark[2]]
-            points.InsertNextPoint(ras_landmark)
+    for lps_landmark in lps_landmarks:
+        ras_landmark = [-lps_landmark[0], -lps_landmark[1], lps_landmark[2]]
+        points.InsertNextPoint(ras_landmark)
 
     return points
 
@@ -57,8 +54,8 @@ def point_to_glyph(points):
     return actor
 
 
-def get_landmarks_actor() -> vtkActor:
-    ras_landmarks = load_landmarks_in_ras_coordinates()
+def get_landmarks_actor(landmarks_lps: list[float], plot_color: str) -> vtkActor:
+    ras_landmarks = load_landmarks_in_ras_coordinates(landmarks_lps)
 
     # transform
     landmark_transform = vtk.vtkLandmarkTransform()
@@ -80,15 +77,15 @@ def get_landmarks_actor() -> vtkActor:
 
     # actor
     actor = point_to_glyph(glyph_filter.GetOutput().GetPoints())
-    actor.GetProperty().SetColor(colors.GetColor3d("tomato"))
+    actor.GetProperty().SetColor(colors.GetColor3d(plot_color))
 
     return actor
 
 
-def get_skull_actor(nifti_file: str, iso_value: float):
+def get_skull_actor(nifti_filename: str, iso_value: float):
     # reader
     reader = vtk.vtkNIFTIImageReader()
-    reader.SetFileName(nifti_file)
+    reader.SetFileName(nifti_filename)
     reader.Update()
 
     # volume
@@ -124,10 +121,13 @@ def get_skull_actor(nifti_file: str, iso_value: float):
     return actor
 
 
-def render_skull(nifti_file: str, iso_value: float):
+def render_skull(nifti_filename: str,
+                 iso_value: float,
+                 original_landmarks: list[float],
+                 predict_landmarks: list[float]):
     print("Rendering...")
 
-    if iso_value is None or nifti_file in [None, ""]:
+    if iso_value is None or nifti_filename in [None, ""]:
         print('An ISO value and a nifti file are needed.')
         return
 
@@ -146,13 +146,21 @@ def render_skull(nifti_file: str, iso_value: float):
     interactor.SetRenderWindow(render_window)
 
     # actors
-    renderer.AddActor(get_skull_actor(nifti_file, iso_value))
-    renderer.AddActor(get_landmarks_actor())
+    renderer.AddActor(get_skull_actor(nifti_filename, iso_value))
+    renderer.AddActor(get_landmarks_actor(original_landmarks, plot_color="tomato"))
+    renderer.AddActor(get_landmarks_actor(predict_landmarks, plot_color="blue"))
 
     renderer.ResetCamera()
 
     render_window.Render()
     interactor.Start()
 
-if __name__ == "__main__":
-    render_skull(nifti_file="cts.nii.gz", iso_value=100)
+
+def reconstruct_with_landmarks(
+        nifti_filename: str,
+        original_landmarks: list[float],
+        predict_landmarks: list[float]):
+    render_skull(nifti_filename,
+                 original_landmarks=original_landmarks,
+                 predict_landmarks=predict_landmarks,
+                 iso_value=100)
