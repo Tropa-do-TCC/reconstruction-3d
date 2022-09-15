@@ -121,10 +121,10 @@ def get_skull_actor(nifti_filename: str, iso_value: float):
     return actor
 
 
-def render_skull(nifti_filename: str,
-                 iso_value: float,
-                 original_landmarks: list[float],
-                 predict_landmarks: list[float]):
+def reconstruct_with_landmarks(nifti_filename: str,
+                               iso_value: float,
+                               original_landmarks: list[float],
+                               predict_landmarks: list[float]):
     print("Rendering...")
 
     if iso_value is None or nifti_filename in [None, ""]:
@@ -154,13 +154,3 @@ def render_skull(nifti_filename: str,
 
     render_window.Render()
     interactor.Start()
-
-
-def reconstruct_with_landmarks(
-        nifti_filename: str,
-        original_landmarks: list[float],
-        predict_landmarks: list[float]):
-    render_skull(nifti_filename,
-                 original_landmarks=original_landmarks,
-                 predict_landmarks=predict_landmarks,
-                 iso_value=100)
