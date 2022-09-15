@@ -4,20 +4,30 @@ from vtk.vtkCommonColor import vtkNamedColors
 from vtk.vtkCommonDataModel import vtkImageData
 from vtk.vtkFiltersCore import vtkFlyingEdges3D, vtkMarchingCubes
 from vtk.vtkFiltersSources import vtkSphereSource
-from vtk.vtkIOImage import vtkDICOMImageReader
 from vtk.vtkRenderingCore import (vtkActor, vtkPolyDataMapper, vtkRenderer,
                                   vtkRenderWindow, vtkRenderWindowInteractor)
 from vtkmodules.vtkCommonColor import vtkNamedColors
 from vtkmodules.vtkRenderingCore import (vtkActor, vtkPolyDataMapper,
                                          vtkRenderer, vtkRenderWindow,
                                          vtkRenderWindowInteractor)
-from vtkmodules.vtkRenderingAnnotation import vtkAxesActor
-
-from dcm_decompress import decompress_slices
 
 import json
 
 colors = vtkNamedColors()
+
+
+def load_landmarks_in_ras_coordinates() -> vtk.vtkPoints:
+    points = vtk.vtkPoints()
+
+    with open('landmarks.json', 'r') as json_file:
+        data = json.load(json_file)
+        lps_landmarks = [landmark['position'] for landmark in data['markups'][0]['controlPoints']]
+
+        for lps_landmark in lps_landmarks:
+            ras_landmark = [-lps_landmark[0], -lps_landmark[1], lps_landmark[2]]
+            points.InsertNextPoint(ras_landmark)
+
+    return points
 
 
 def point_to_glyph(points):
@@ -26,7 +36,7 @@ def point_to_glyph(points):
     for i in range(1, 3):
         max_len = max(bounds[i + 1] - bounds[i], max_len)
 
-    sphere_source = vtk.vtkSphereSource()
+    sphere_source = vtkSphereSource()
     sphere_source.SetRadius(2)
 
     # polydata
@@ -46,29 +56,19 @@ def point_to_glyph(points):
 
     return actor
 
-def translate_to_origin(actor: vtkActor) -> vtk.vtkTransform:
-    center_of_mass = actor.GetCenter()
-    transform = vtk.vtkTransform()
-    transform.PostMultiply()
-    transform.Translate(-center_of_mass[0], -center_of_mass[1], -center_of_mass[2])
-
-    return transform
 
 def get_landmarks_actor() -> vtkActor:
-    points = vtk.vtkPoints()
+    ras_landmarks = load_landmarks_in_ras_coordinates()
 
-    with open('landmarks.json', 'r') as json_file:
-        data = json.load(json_file)
-        landmarks = [landmark['position'] for landmark in data['markups'][0]['controlPoints']]
-
-        [points.InsertNextPoint(landmark) for landmark in landmarks]
-
+    # transform
     landmark_transform = vtk.vtkLandmarkTransform()
-    landmark_transform.SetSourceLandmarks(points)
+    landmark_transform.SetSourceLandmarks(ras_landmarks)
 
+    # polydata
     polydata = vtk.vtkPolyData()
-    polydata.SetPoints(points)
+    polydata.SetPoints(ras_landmarks)
 
+    # filter
     glyph_filter = vtk.vtkVertexGlyphFilter()
     glyph_filter.SetInputData(polydata)
     glyph_filter.Update()
@@ -78,34 +78,41 @@ def get_landmarks_actor() -> vtkActor:
     transform_filter.SetTransform(landmark_transform)
     transform_filter.Update()
 
+    # actor
     actor = point_to_glyph(glyph_filter.GetOutput().GetPoints())
     actor.GetProperty().SetColor(colors.GetColor3d("tomato"))
-
-    origin_translation = translate_to_origin(actor)
-    actor.SetUserTransform(origin_translation)
 
     return actor
 
 
-def get_skull_actor(dicom_dir: str, iso_value: float) -> vtkActor:
-    volume = vtkImageData()
-
+def get_skull_actor(nifti_file: str, iso_value: float):
     # reader
-    reader = vtkDICOMImageReader()
-    reader.SetDirectoryName(dicom_dir)
+    reader = vtk.vtkNIFTIImageReader()
+    reader.SetFileName(nifti_file)
     reader.Update()
+
+    # volume
+    volume = vtkImageData()
     volume.DeepCopy(reader.GetOutput())
 
     # surface
-    # surface = vtkMarchingCubes()
     surface = vtkFlyingEdges3D()
     surface.SetInputData(volume)
     surface.ComputeNormalsOn()
     surface.SetValue(0, iso_value)
 
+    # transformations
+    coordinates_transform = vtk.vtkTransform()
+    coordinates_transform.SetMatrix(reader.GetQFormMatrix())
+
+    transform_filter = vtk.vtkTransformFilter()
+    transform_filter.SetTransform(coordinates_transform)
+    transform_filter.SetInputConnection(surface.GetOutputPort())
+    transform_filter.Update()
+
     # mapper
     mapper = vtkPolyDataMapper()
-    mapper.SetInputConnection(surface.GetOutputPort())
+    mapper.SetInputConnection(transform_filter.GetOutputPort())
     mapper.ScalarVisibilityOff()
 
     # actor
@@ -114,20 +121,14 @@ def get_skull_actor(dicom_dir: str, iso_value: float) -> vtkActor:
     actor.GetProperty().SetOpacity(1)
     actor.GetProperty().SetColor(colors.GetColor3d('Green'))
 
-    transform = translate_to_origin(actor)
-    transform.RotateZ(180)
-    transform.RotateX(90)
-
-    actor.SetUserTransform(transform)
-
     return actor
 
 
-def render_skull(dicom_dir: str, iso_value: float):
+def render_skull(nifti_file: str, iso_value: float):
     print("Rendering...")
 
-    if iso_value is None or dicom_dir in [None, ""]:
-        print('An ISO value and a DICOMDIR are needed.')
+    if iso_value is None or nifti_file in [None, ""]:
+        print('An ISO value and a nifti file are needed.')
         return
 
     # renderer
@@ -145,7 +146,7 @@ def render_skull(dicom_dir: str, iso_value: float):
     interactor.SetRenderWindow(render_window)
 
     # actors
-    renderer.AddActor(get_skull_actor(dicom_dir, iso_value))
+    renderer.AddActor(get_skull_actor(nifti_file, iso_value))
     renderer.AddActor(get_landmarks_actor())
 
     renderer.ResetCamera()
@@ -154,7 +155,4 @@ def render_skull(dicom_dir: str, iso_value: float):
     interactor.Start()
 
 if __name__ == "__main__":
-    dicom_dir = "dicomdir"
-    decompress_slices(dicom_dir)
-
-    render_skull(dicom_dir, iso_value=100)
+    render_skull(nifti_file="cts.nii.gz", iso_value=100)
