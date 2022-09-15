@@ -54,8 +54,8 @@ def point_to_glyph(points):
     return actor
 
 
-def get_landmarks_actor(landmarks_lps: list[float], plot_color: str) -> vtkActor:
-    ras_landmarks = load_landmarks_in_ras_coordinates(landmarks_lps)
+def get_landmarks_actor(lps_landmarks: list[float], plot_color: str) -> vtkActor:
+    ras_landmarks = load_landmarks_in_ras_coordinates(lps_landmarks)
 
     # transform
     landmark_transform = vtk.vtkLandmarkTransform()
