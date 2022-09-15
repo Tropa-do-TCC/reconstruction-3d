@@ -1,9 +1,8 @@
-#!/usr/bin/env python
+import vtk
 
-# noinspection PyUnresolvedReferences
 from vtk.vtkCommonColor import vtkNamedColors
 from vtk.vtkCommonDataModel import vtkImageData
-from vtk.vtkFiltersCore import vtkFlyingEdges3D
+from vtk.vtkFiltersCore import vtkFlyingEdges3D, vtkMarchingCubes
 from vtk.vtkFiltersSources import vtkSphereSource
 from vtk.vtkIOImage import vtkDICOMImageReader
 from vtk.vtkRenderingCore import (vtkActor, vtkPolyDataMapper, vtkRenderer,
@@ -12,31 +11,78 @@ from vtkmodules.vtkCommonColor import vtkNamedColors
 from vtkmodules.vtkRenderingCore import (vtkActor, vtkPolyDataMapper,
                                          vtkRenderer, vtkRenderWindow,
                                          vtkRenderWindowInteractor)
+from vtkmodules.vtkRenderingAnnotation import vtkAxesActor
 
 from dcm_decompress import decompress_slices
+
+import json
 
 colors = vtkNamedColors()
 
 
-def get_landmarks_actors():
-    # Create a sphere
-    sphere_source = vtkSphereSource()
-    sphere_source.SetCenter(252, 88, 5)
-    sphere_source.SetRadius(5)
+def point_to_glyph(points):
+    bounds = points.GetBounds()
+    max_len = 0
+    for i in range(1, 3):
+        max_len = max(bounds[i + 1] - bounds[i], max_len)
 
-    # Make the surface smooth.
-    sphere_source.SetPhiResolution(100)
-    sphere_source.SetThetaResolution(100)
+    sphere_source = vtk.vtkSphereSource()
+    sphere_source.SetRadius(2)
+
+    # polydata
+    polydata = vtk.vtkPolyData()
+    polydata.SetPoints(points)
 
     # mapper
-    mapper = vtkPolyDataMapper()
-    mapper.SetInputConnection(sphere_source.GetOutputPort())
+    mapper = vtk.vtkGlyph3DMapper()
+    mapper.SetInputData(polydata)
+    mapper.SetSourceConnection(sphere_source.GetOutputPort())
+    mapper.ScalarVisibilityOff()
+    mapper.ScalingOff()
 
     # actor
-    actor = vtkActor()
+    actor = vtk.vtkActor()
     actor.SetMapper(mapper)
-    actor.GetProperty().SetColor(colors.GetColor3d('Tomato'))
-    actor.GetProperty().SetPointSize(20)
+
+    return actor
+
+def translate_to_origin(actor: vtkActor) -> vtk.vtkTransform:
+    center_of_mass = actor.GetCenter()
+    transform = vtk.vtkTransform()
+    transform.PostMultiply()
+    transform.Translate(-center_of_mass[0], -center_of_mass[1], -center_of_mass[2])
+
+    return transform
+
+def get_landmarks_actors() -> vtkActor:
+    points = vtk.vtkPoints()
+
+    with open('landmarks.json', 'r') as json_file:
+        data = json.load(json_file)
+        landmarks = [landmark['position'] for landmark in data['markups'][0]['controlPoints']]
+
+        [points.InsertNextPoint(landmark) for landmark in landmarks]
+
+    landmark_transform = vtk.vtkLandmarkTransform()
+    landmark_transform.SetSourceLandmarks(points)
+
+    polydata = vtk.vtkPolyData()
+    polydata.SetPoints(points)
+
+    glyph_filter = vtk.vtkVertexGlyphFilter()
+    glyph_filter.SetInputData(polydata)
+    glyph_filter.Update()
+
+    transform_filter = vtk.vtkTransformPolyDataFilter()
+    transform_filter.SetInputConnection(glyph_filter.GetOutputPort())
+    transform_filter.SetTransform(landmark_transform)
+    transform_filter.Update()
+
+    actor = point_to_glyph(glyph_filter.GetOutput().GetPoints())
+    actor.GetProperty().SetColor(colors.GetColor3d("tomato"))
+
+    transform = translate_to_origin(actor)
+    actor.SetUserTransform(transform)
 
     return actor
 
@@ -65,7 +111,14 @@ def get_skull_actor(dicom_dir: str, iso_value: float):
     # actor
     actor = vtkActor()
     actor.SetMapper(mapper)
+    actor.GetProperty().SetOpacity(1)
     actor.GetProperty().SetColor(colors.GetColor3d('Green'))
+
+    transform = translate_to_origin(actor)
+    transform.RotateZ(180)
+    transform.RotateX(90)
+
+    actor.SetUserTransform(transform)
 
     return actor
 
@@ -101,7 +154,7 @@ def render_skull(dicom_dir: str, iso_value: float):
     interactor.Start()
 
 if __name__ == "__main__":
-    dicom_dir = "dicom_dir"
-
+    dicom_dir = "dicomdir"
     decompress_slices(dicom_dir)
+
     render_skull(dicom_dir, iso_value=100)
