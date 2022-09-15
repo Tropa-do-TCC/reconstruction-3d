@@ -23,7 +23,6 @@ def load_landmarks_in_ras_coordinates() -> vtk.vtkPoints:
         data = json.load(json_file)
         lps_landmarks = [landmark['position'] for landmark in data['markups'][0]['controlPoints']]
 
-        print(lps_landmarks)
         for lps_landmark in lps_landmarks:
             ras_landmark = [-lps_landmark[0], -lps_landmark[1], lps_landmark[2]]
             points.InsertNextPoint(ras_landmark)
