@@ -17,7 +17,7 @@ from vtkmodules.vtkRenderingCore import (vtkActor, vtkPolyDataMapper,
 colors = vtkNamedColors()
 
 
-def load_landmarks_in_ras_coordinates(lps_landmarks: list[float]) -> vtk.vtkPoints:
+def convert_landmarks_to_ras_coordinates(lps_landmarks: list[float]) -> vtk.vtkPoints:
     points = vtk.vtkPoints()
 
     for lps_landmark in lps_landmarks:
@@ -55,7 +55,7 @@ def point_to_glyph(points):
 
 
 def get_landmarks_actor(lps_landmarks: list[float], plot_color: str) -> vtkActor:
-    ras_landmarks = load_landmarks_in_ras_coordinates(lps_landmarks)
+    ras_landmarks = convert_landmarks_to_ras_coordinates(lps_landmarks)
 
     # transform
     landmark_transform = vtk.vtkLandmarkTransform()
