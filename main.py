@@ -54,7 +54,7 @@ def translate_to_origin(actor: vtkActor) -> vtk.vtkTransform:
 
     return transform
 
-def get_landmarks_actors() -> vtkActor:
+def get_landmarks_actor() -> vtkActor:
     points = vtk.vtkPoints()
 
     with open('landmarks.json', 'r') as json_file:
@@ -81,13 +81,13 @@ def get_landmarks_actors() -> vtkActor:
     actor = point_to_glyph(glyph_filter.GetOutput().GetPoints())
     actor.GetProperty().SetColor(colors.GetColor3d("tomato"))
 
-    transform = translate_to_origin(actor)
-    actor.SetUserTransform(transform)
+    origin_translation = translate_to_origin(actor)
+    actor.SetUserTransform(origin_translation)
 
     return actor
 
 
-def get_skull_actor(dicom_dir: str, iso_value: float):
+def get_skull_actor(dicom_dir: str, iso_value: float) -> vtkActor:
     volume = vtkImageData()
 
     # reader
@@ -146,7 +146,7 @@ def render_skull(dicom_dir: str, iso_value: float):
 
     # actors
     renderer.AddActor(get_skull_actor(dicom_dir, iso_value))
-    renderer.AddActor(get_landmarks_actors())
+    renderer.AddActor(get_landmarks_actor())
 
     renderer.ResetCamera()
 
