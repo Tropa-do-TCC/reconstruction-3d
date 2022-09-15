@@ -17,7 +17,7 @@ from vtkmodules.vtkRenderingCore import (vtkActor, vtkPolyDataMapper,
 colors = vtkNamedColors()
 
 
-def convert_landmarks_to_ras_coordinates(lps_landmarks: list[float]) -> vtk.vtkPoints:
+def convert_landmarks_to_ras_coordinates(lps_landmarks: list[list[float]]) -> vtk.vtkPoints:
     points = vtk.vtkPoints()
 
     for lps_landmark in lps_landmarks:
@@ -27,7 +27,7 @@ def convert_landmarks_to_ras_coordinates(lps_landmarks: list[float]) -> vtk.vtkP
     return points
 
 
-def point_to_glyph(points):
+def point_to_glyph(points) -> vtk.vtkActor:
     bounds = points.GetBounds()
     max_len = 0
     for i in range(1, 3):
@@ -54,7 +54,7 @@ def point_to_glyph(points):
     return actor
 
 
-def get_landmarks_actor(lps_landmarks: list[float], plot_color: str) -> vtkActor:
+def get_landmarks_actor(lps_landmarks: list[list[float]], plot_color: str) -> vtkActor:
     ras_landmarks = convert_landmarks_to_ras_coordinates(lps_landmarks)
 
     # transform
@@ -123,8 +123,8 @@ def get_skull_actor(nifti_filename: str, iso_value: float):
 
 def reconstruct_with_landmarks(nifti_filename: str,
                                iso_value: float,
-                               original_landmarks: list[float],
-                               predict_landmarks: list[float]):
+                               original_landmarks: list[list[float]],
+                               predict_landmarks: list[list[float]]):
     print("Rendering...")
 
     if iso_value is None or nifti_filename in [None, ""]:
